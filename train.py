@@ -5,8 +5,13 @@ import pickle
 from sumeval.metrics.rouge import RougeCalculator
 from sumeval.metrics.bleu import BLEUCalculator
 from hyperdash import Experiment
-
+import numpy as np
 import util
+
+cuda = False
+if torch.cuda.is_available():
+    cuda = True
+
 
 def train_classification(data_loader, dev_iter, encoder, decoder, mlp, args):
     lr = args.lr
@@ -18,7 +23,7 @@ def train_classification(data_loader, dev_iter, encoder, decoder, mlp, args):
     decoder.train()
     mlp.train()
     steps = 0
-    for epoch in range(1, args.epochs+1):
+    for epoch in range(1, args.epochs + 1):
         alpha = util.sigmoid_annealing_schedule(epoch, args.epochs)
         print("=======Epoch========")
         print(epoch)
@@ -103,10 +108,11 @@ def train_reconstruction(train_loader, test_loader, encoder, decoder, args):
         encoder.train()
         decoder.train()
         steps = 0
-        for epoch in range(1, args.epochs+1):
+        for epoch in range(1, args.epochs + 1):
             print("=======Epoch========")
             print(epoch)
-            for batch in train_loader:
+            loss = 0
+            for i, batch in enumerate(train_loader):
                 feature = Variable(batch)
                 if args.use_cuda:
                     encoder.cuda()
@@ -124,18 +130,22 @@ def train_reconstruction(train_loader, test_loader, encoder, decoder, args):
                 decoder_opt.step()
 
                 steps += 1
-                print("Epoch: {}".format(epoch))
-                print("Steps: {}".format(steps))
-                print("Loss: {}".format(reconstruction_loss.data[0] / args.sentence_len))
-                exp.metric("Loss", reconstruction_loss.data[0] / args.sentence_len)
+                loss += reconstruction_loss.data[0] / args.sentence_len
+                if (i + 1) % 100 == 0:
+                    print("Epoch: {}".format(epoch))
+                    print("Steps: {}".format(steps))
+                    print("Loss: {}".format(loss / i))
+                # exp.metric("Loss", reconstruction_loss.data[0] / args.sentence_len)
                 # check reconstructed sentence
                 if steps % args.log_interval == 0:
                     print("Test!!")
                     input_data = feature[0]
                     single_data = prob[0]
                     _, predict_index = torch.max(single_data, 1)
-                    input_sentence = util.transform_id2word(input_data.data, train_loader.dataset.index2word, lang="en")
-                    predict_sentence = util.transform_id2word(predict_index.data, train_loader.dataset.index2word, lang="en")
+                    input_sentence = util.transform_id2word(input_data.data.cpu().numpy(),
+                                                            train_loader.dataset.index2word, lang="en")
+                    predict_sentence = util.transform_id2word(predict_index.data.cpu().numpy(),
+                                                              train_loader.dataset.index2word, lang="en")
                     print("Input Sentence:")
                     print(input_sentence)
                     print("Output Sentence:")
@@ -143,7 +153,6 @@ def train_reconstruction(train_loader, test_loader, encoder, decoder, args):
 
             if steps % args.test_interval == 0:
                 eval_reconstruction(encoder, decoder, test_loader, args)
-
 
             if epoch % args.lr_decay_interval == 0:
                 # decrease learning rate
@@ -172,11 +181,22 @@ def train_reconstruction(train_loader, test_loader, encoder, decoder, args):
         exp.end()
 
 
+def compute_similarity(encoder, predicted, target, tal=0.01):
+    target_embed = encoder.embed(target)
+    target_embed = encoder.normalization(target_embed)
+    predicted = encoder.normalization(predicted)
+    similarity = tal * np.sum(predicted * target_embed, 2)
+    loss = F.log_softmax(similarity)
+    return loss
+
+
 def compute_cross_entropy(log_prob, target):
     # compute reconstruction loss using cross entropy
-    loss = [F.nll_loss(sentence_emb_matrix, word_ids, size_average=False) for sentence_emb_matrix, word_ids in zip(log_prob, target)]
+    loss = [F.nll_loss(sentence_emb_matrix, word_ids, size_average=False) for sentence_emb_matrix, word_ids in
+            zip(log_prob, target)]
     average_loss = sum([torch.sum(l) for l in loss]) / log_prob.size()[0]
     return average_loss
+
 
 def eval_classification(encoder, mlp, feature, label):
     encoder.eval()
@@ -207,8 +227,10 @@ def eval_reconstruction(encoder, decoder, data_iter, args):
         h = encoder(feature)
         prob = decoder(h)
         _, predict_index = torch.max(prob, 2)
-        original_sentences = [util.transform_id2word(sentence, index2word, "en") for sentence in batch]
-        predict_sentences = [util.transform_id2word(sentence, index2word, "en") for sentence in predict_index.data]
+        original_sentences = [util.transform_id2word(sentence.data.cpu().numpy(), index2word, "en") for sentence in
+                              batch]
+        predict_sentences = [util.transform_id2word(sentence.data.cpu().numpy(), index2word, "en") for sentence in
+                             predict_index.data]
         r1, r2 = calc_rouge(original_sentences, predict_sentences)
         rouge_1 += r1
         rouge_2 += r2
@@ -222,6 +244,7 @@ def eval_reconstruction(encoder, decoder, data_iter, args):
     print("===============================================================")
     encoder.train()
     decoder.train()
+
 
 def calc_rouge(original_sentences, predict_sentences):
     rouge_1 = 0.0

@@ -14,9 +14,9 @@ import math
 def main():
     parser = argparse.ArgumentParser(description='text convolution-deconvolution auto-encoder model')
     # learning
-    parser.add_argument('-lr', type=float, default=0.001, help='initial learning rate')
+    parser.add_argument('-lr', type=float, default=0.005, help='initial learning rate')
     parser.add_argument('-epochs', type=int, default=10, help='number of epochs for train')
-    parser.add_argument('-batch_size', type=int, default=16, help='batch size for training')
+    parser.add_argument('-batch_size', type=int, default=64, help='batch size for training')
     parser.add_argument('-lr_decay_interval', type=int, default=4,
                         help='how many epochs to wait before decrease learning rate')
     parser.add_argument('-log_interval', type=int, default=256,
@@ -27,7 +27,7 @@ def main():
                         help='how many epochs to wait before saving')
     parser.add_argument('-save_dir', type=str, default='rec_snapshot', help='where to save the snapshot')
     # data
-    parser.add_argument('-data_path', type=str, help='data path')
+    parser.add_argument('-data_path', type=str, default='hotel_reviews.p', help='data path')
     parser.add_argument('-shuffle', default=False, help='shuffle data every epoch')
     parser.add_argument('-sentence_len', type=int, default=253, help='how many tokens in a sentence')
     # model
@@ -44,26 +44,28 @@ def main():
     args = parser.parse_args()
 
     train_data, test_data = load_hotel_review_data(args.data_path, args.sentence_len)
-    train_loader, test_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=args.shuffle),\
-                                  DataLoader(test_data, batch_size=args.batch_size, shuffle=args.shuffle)
+    train_loader, test_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=args.shuffle), \
+                                DataLoader(test_data, batch_size=args.batch_size, shuffle=args.shuffle)
 
     k = args.embed_dim
     v = train_data.vocab_lennght()
     t1 = args.sentence_len + 2 * (args.filter_shape - 1)
-    t2 = int(math.floor((t1 - args.filter_shape) / 2) + 1) # "2" means stride size
+    t2 = int(math.floor((t1 - args.filter_shape) / 2) + 1)  # "2" means stride size
     t3 = int(math.floor((t2 - args.filter_shape) / 2) + 1) - 2
     if args.enc_snapshot is None or args.dec_snapshot is None:
         print("Start from initial")
         embedding = nn.Embedding(v, k, max_norm=1.0, norm_type=2.0)
 
         encoder = model.ConvolutionEncoder(embedding, t3, args.filter_size, args.filter_shape, args.latent_size)
-        decoder = model.DeconvolutionDecoder(embedding, args.tau, t3, args.filter_size, args.filter_shape, args.latent_size)
+        decoder = model.DeconvolutionDecoder(embedding, args.tau, t3, args.filter_size, args.filter_shape,
+                                             args.latent_size)
     else:
         print("Restart from snapshot")
         encoder = torch.load(args.enc_snapshot)
         decoder = torch.load(args.dec_snapshot)
 
     train_reconstruction(train_loader, test_loader, encoder, decoder, args)
+
 
 if __name__ == '__main__':
     main()

@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 import math
+import numpy as np
+
 
 class ConvolutionEncoder(nn.Module):
     def __init__(self, embedding, sentence_len, filter_size, filter_shape, latent_size):
@@ -22,6 +24,7 @@ class ConvolutionEncoder(nn.Module):
 
     def __call__(self, x):
         x = self.embed(x)
+        x = self.normalization(x)
 
         # x.size() is (L, emb_dim) if batch_size is 1.
         # So interpolate x's dimension if batch_size is 1.
@@ -35,6 +38,11 @@ class ConvolutionEncoder(nn.Module):
         h3 = F.relu(self.convs3(h2))
 
         return h3
+
+    def normalization(self, x):
+        x_norm = torch.sqrt(torch.sum(x * x, dim=2))
+        x_norm = x / x_norm.unsqueeze(2).expand(*x_norm.size(),x.size()[-1])
+        return x_norm
 
 
 class DeconvolutionDecoder(nn.Module):
@@ -71,7 +79,7 @@ class DeconvolutionDecoder(nn.Module):
         # compute probability
         norm_w = Variable(self.embed.weight.data).t()
         prob_logits = torch.bmm(rec_x_hat, norm_w.unsqueeze(0)
-                         .expand(rec_x_hat.size(0), *norm_w.size())) / self.tau
+                                .expand(rec_x_hat.size(0), *norm_w.size())) / self.tau
         log_prob = F.log_softmax(prob_logits, dim=2)
         return log_prob
 

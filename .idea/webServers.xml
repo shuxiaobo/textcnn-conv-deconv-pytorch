@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="c6040310-1dcf-4917-a39a-44cfe8604a0a" name="didiP40" url="http://10.85.147.11">
+        <fileTransfer host="10.85.147.11" port="8022" rootFolder="/data/shuxiaobo_i" accessType="SFTP">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" />
+          </advancedOptions>
+          <option name="port" value="8022" />
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

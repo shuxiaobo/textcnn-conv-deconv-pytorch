@@ -25,7 +25,7 @@ def main():
                         help='how many epochs to wait before saving')
     parser.add_argument('-save_dir', type=str, default='snapshot', help='where to save the snapshot')
     # data
-    parser.add_argument('-data_path', type=str, help='data path')
+    parser.add_argument('-data_path', type=str, default='hotel_review.p', help='data path')
     parser.add_argument('-label_path', type=str, help='label path')
     parser.add_argument('-separated', type=str, default='sentencepiece', help='how separated text data is')
     parser.add_argument('-shuffle', default=False, help='shuffle the data every epoch')
